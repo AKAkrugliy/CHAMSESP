@@ -1,0 +1,147 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local RS = game:GetService("RunService")
+local LP = Players.LocalPlayer
+
+local WALLSHOT_KEY = Enum.KeyCode.J
+local MAX_TRANSPARENT_PARTS = 50
+local HIGHLIGHT_ENABLED = true
+
+local function waitForCharacter()
+    repeat task.wait() until LP.Character
+    repeat task.wait() until LP.Character:FindFirstChild("Humanoid")
+    return LP.Character
+end
+
+local character = waitForCharacter()
+
+local function findHRP(model)
+    return model:FindFirstChild("Torso") or model:FindFirstChild("UpperTorso") or model:FindFirstChild("HumanoidRootPart")
+end
+
+local function createCustomHighlight()
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "HellmetESP"
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillTransparency = 0.6
+    highlight.OutlineTransparency = 0.3
+    return highlight
+end
+
+local function playerESP()
+    local highlights = {}
+    local enemyColor = Color3.fromRGB(255, 50, 50)
+    local allyColor = Color3.fromRGB(50, 255, 50)
+
+    local function updateESP()
+        for character, highlight in pairs(highlights) do
+            if not character.Parent or character.Parent ~= workspace then
+                highlight:Destroy()
+                highlights[character] = nil
+            end
+        end
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player == LP then continue end
+            
+            local character = player.Character
+            if character and character:IsDescendantOf(workspace) then
+                local hrp = findHRP(character)
+                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                
+                if hrp and humanoid and humanoid.Health > 0 then
+                    if not highlights[character] and HIGHLIGHT_ENABLED then
+                        local highlight = createCustomHighlight()
+                        highlight.Adornee = character
+                        highlight.Parent = character
+
+                        if player.Team == LP.Team then
+                            highlight.FillColor = allyColor
+                            highlight.OutlineColor = allyColor
+                        else
+                            highlight.FillColor = enemyColor
+                            highlight.OutlineColor = enemyColor
+                        end
+                        
+                        highlights[character] = highlight
+                    end
+                end
+            end
+        end
+    end
+
+    RS.Heartbeat:Connect(function()
+        pcall(updateESP)
+    end)
+end
+
+local function wallPenetration()
+    local wallshotActive = false
+    local affectedParts = {}
+    local camera = workspace.CurrentCamera
+
+    local function processWallTransparency()
+        for part, data in pairs(affectedParts) do
+            if part.Parent then
+                part.Transparency = data.original
+            end
+        end
+        affectedParts = {}
+
+        if not wallshotActive then return end
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player == LP then continue end
+            
+            local character = player.Character
+            if character then
+                local hrp = findHRP(character)
+                if hrp then
+
+                    local params = RaycastParams.new()
+                    params.FilterDescendantsInstances = {LP.Character, camera}
+                    params.FilterType = Enum.RaycastFilterType.Exclude
+                    params.IgnoreWater = true
+
+                    local direction = (hrp.Position - camera.
+
+CFrame.Position).Unit
+                    local result = workspace:Raycast(camera.CFrame.Position, direction * 2000, params)
+                    
+                    if result and result.Instance then
+                        local part = result.Instance
+                        if not affectedParts[part] and part.Transparency < 0.5 then
+                            affectedParts[part] = {
+                                original = part.Transparency,
+                                material = part.Material
+                            }
+                            part.Transparency = 0.85
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    UIS.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.KeyCode == WALLSHOT_KEY then
+            wallshotActive = not wallshotActive
+            print(`Wallshot: {wallshotActive and "ON" or "OFF"}`)
+        end
+    end)
+
+    RS.RenderStepped:Connect(function()
+        pcall(processWallTransparency)
+    end)
+end
+
+playerESP()
+wallPenetration()
+
+game:BindToClose(function()
+    for _, highlight in pairs(workspace:GetDescendants()) do
+        if highlight:IsA("Highlight") and highlight.Name == "HellmetESP" then
+            highlight:Destroy()
+        end
+    end
+end)
